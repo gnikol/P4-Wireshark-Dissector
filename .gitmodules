@@ -1,0 +1,3 @@
+[submodule "p4_hlir"]
+	path = p4_hlir
+	url = git@github.com:p4lang/p4-hlir.git
