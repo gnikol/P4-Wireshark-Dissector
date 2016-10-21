@@ -21,8 +21,3 @@ function tobits(number, bitcount, first_bit, last_bit)
     end
     return table.concat(table_slice(bit_table, first_bit, last_bit))
 end
-
--- Convert a buffer into its hexadecimal representation
-function tohex(input_buffer, bytecount,  first_bit, last_bit)
-    return bit.tobit(input_buffer)
-end
