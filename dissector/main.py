@@ -61,7 +61,13 @@ for i, field in enumerate(header_fields):
                 + ', ' + end_bit + ')')
     else:
         f.write(' .. "Hex: " .. ')
-        f.write('tostring(' + buffer_str + ':bytes())')
+        start_bit = str(field_offset % 8)
+        end_bit = str(field.width)
+        bytecount = str(int(math.ceil(field.width / 4)))
+
+        f.write('string.format("%0' + bytecount + 'X"' + ',' + buffer_str
+                + ':bitfield(' + start_bit + ', ' + end_bit + '))')
+
     f.write(')\n')
     field_offset += field.width
 
