@@ -16,16 +16,20 @@ import os
 import sys
 import shutil
 import math
+import argparse
 sys.path.append('../p4_hlir')
 from p4_hlir.main import HLIR
 from p4_hlir import hlir
 
-
-p4_source = sys.argv[1]
-absolute_source = os.path.join(os.getcwd(), p4_source)
-if not os.path.isfile(absolute_source):
-    print "Source file '" + p4_source + \
-          "' could not be opened or does not exist."
+arg_parser = argparse.ArgumentParser(description='Create a Wireshark dissector '
+                                                 'from a P4 file')
+arg_parser.add_argument('-i', metavar="P4 input", type=argparse.FileType('r'),
+                        dest="p4_source")
+arg_parser.add_argument('-p', metavar="protocol", dest="protocol")
+args = arg_parser.parse_args()
+p4_source = args.p4_source
+p4_protocol = args.protocol
+absolute_source = os.path.abspath(p4_source.name)
 
 input_hlir = HLIR(absolute_source)
 input_hlir.build()
