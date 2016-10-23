@@ -14,11 +14,11 @@
 
 import os
 import sys
+import shutil
+import math
 sys.path.append('../p4_hlir')
 from p4_hlir.main import HLIR
 from p4_hlir import hlir
-import shutil
-import math
 
 
 p4_source = sys.argv[1]
