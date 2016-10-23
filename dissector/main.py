@@ -35,13 +35,17 @@ input_hlir = HLIR(absolute_source)
 input_hlir.build()
 
 # Get a parser_state
-for parse_state in input_hlir.p4_parse_states.itervalues():
+parse_state = None
+for parse_state_iterator in input_hlir.p4_parse_states.itervalues():
     # Find the corresponding parser state. "start" doesn't have a
     # latest_extraction so check for that first
-    if (parse_state.name != "start"
-            and parse_state.latest_extraction.name == p4_protocol):
+    if (parse_state_iterator.name != "start"
+            and parse_state_iterator.latest_extraction.name == p4_protocol):
+        parse_state = parse_state_iterator
         break
-print parse_state
+if not parse_state:
+    print "Protocol %s not found in %s" % (p4_protocol, absolute_source)
+    exit()
 
 # Fields of the parser state
 header_fields = parse_state.branch_on[0].instance.fields
