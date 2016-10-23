@@ -48,8 +48,8 @@ if not parse_state:
     exit()
 
 # Fields of the parser state
-header_fields = parse_state.branch_on[0].instance.fields
-protocol_name = 'p4_' + parse_state.branch_on[0].instance.name
+header_fields = parse_state.latest_extraction.fields
+protocol_name = 'p4_' + parse_state.latest_extraction.name
 # Write to file
 dissector_filename = os.path.dirname(absolute_source) + "/" + "p4_dissector.lua"
 shutil.copyfile('p4_dissector_template.lua', dissector_filename)
