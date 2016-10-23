@@ -21,6 +21,7 @@ sys.path.append('../p4_hlir')
 from p4_hlir.main import HLIR
 from p4_hlir import hlir
 
+# Handle input arguments
 arg_parser = argparse.ArgumentParser(description='Create a Wireshark dissector '
                                                  'from a P4 file')
 arg_parser.add_argument('-i', metavar="P4 input", type=argparse.FileType('r'),
@@ -31,6 +32,7 @@ p4_source = args.p4_source
 p4_protocol = args.protocol
 absolute_source = os.path.abspath(p4_source.name)
 
+# Build HLIR from input
 input_hlir = HLIR(absolute_source)
 input_hlir.build()
 
