@@ -36,10 +36,11 @@ input_hlir.build()
 
 # Get a parser_state
 for parse_state in input_hlir.p4_parse_states.itervalues():
-    if len(parse_state.branch_on) > 0:
-        if isinstance(parse_state.branch_on[0], hlir.p4_headers.p4_field):
-            if parse_state.branch_on[0].instance.name == "ipv4":
-                break
+    # Find the corresponding parser state. "start" doesn't have a
+    # latest_extraction so check for that first
+    if (parse_state.name != "start"
+            and parse_state.latest_extraction.name == p4_protocol):
+        break
 print parse_state
 
 # Fields of the parser state
