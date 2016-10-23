@@ -17,6 +17,7 @@ import sys
 import shutil
 import math
 import argparse
+
 sys.path.append('../p4_hlir')
 from p4_hlir.main import HLIR
 from p4_hlir import hlir
@@ -52,13 +53,18 @@ if not parse_state:
 # Fields of the parser state
 header_fields = parse_state.latest_extraction.fields
 protocol_name = 'p4_' + parse_state.latest_extraction.name
+previous_protocol_name = parse_state.prev.map.keys()[0].latest_extraction.name
+previous_decision_field = \
+    parse_state.prev.map.keys()[0].return_statement[1][0].split('.')[1]
+previous_decision_value = \
+    parse_state.prev.map.keys()[0].return_statement[2][0][0][0][1]
 # Write to file
 dissector_filename = os.path.dirname(absolute_source) + "/" + "p4_dissector.lua"
 shutil.copyfile('p4_dissector_template.lua', dissector_filename)
 f = open(dissector_filename, "a")
 
+# Write the output Lua script
 f.write("\n\n-- Auto generated section\n\n")
-
 f.write('p4_proto = Proto(\"' + protocol_name + '","' + protocol_name.upper()
         + ' Protocol")\n')
 f.write('function p4_proto.dissector(buffer,pinfo,tree)\n')
@@ -95,6 +101,17 @@ for i, field in enumerate(header_fields):
     field_offset += field.width
 
 f.write('end\n\n')
-f.write('my_table = DissectorTable.get("ethertype")\n')
-f.write('my_table:add(0x0800, p4_proto)\n')
+
+# Register insertion point
+dissector_table = previous_decision_field.lower()
+insertion_value = str(previous_decision_value).lower()
+
+# Deal with some common cases
+if previous_protocol_name == 'ipv4' or 'ipv6' and dissector_table == 'protocol':
+    dissector_table = 'ip.proto'
+if previous_protocol_name == 'tcp' and dissector_table == 'port':
+    dissector_table = 'tcp.port'
+
+f.write('my_table = DissectorTable.get("' + dissector_table + '")\n')
+f.write('my_table:add(' + insertion_value + ', p4_proto)\n')
 f.close()
