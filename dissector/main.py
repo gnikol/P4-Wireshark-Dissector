@@ -67,7 +67,6 @@ f.write('    local subtree = tree:add(p4_proto,buffer(),"'
 field_offset = 0  # This is in bits
 
 for i, field in enumerate(header_fields):
-    field.width  # This is in bits
     field_name = field.name
     byte_offset_str = str(field_offset / 8)
     field_length_str = str(int(math.ceil(field.width / 8.0)))
