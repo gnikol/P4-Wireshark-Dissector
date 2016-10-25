@@ -13,14 +13,10 @@
 # limitations under the License.
 
 import os
-import sys
 import shutil
 import math
 import argparse
-
-sys.path.append('../p4_hlir')
 from p4_hlir.main import HLIR
-from p4_hlir import hlir
 
 # Handle input arguments
 arg_parser = argparse.ArgumentParser(description='Create a Wireshark dissector '
