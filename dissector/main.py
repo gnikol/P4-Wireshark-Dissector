@@ -52,12 +52,13 @@ def build_field_string(field, offset):
         format_string = 'string.format("%%0%iX", %s:bitfield(%i, %i))' \
                         % (hex_count, buffer_string, start_bit, end_bit)
 
-    return '    subtree:add(%s, "%s - %s: " .. %s)\n' \
-                    % (buffer_string, field_string, format_type, format_string)
+    return ('    subtree:add(%s, "%s - %s: " .. %s)\n'
+            % (buffer_string, field_string, format_type, format_string))
 
 
 def build_postamble_string(table, value):
-    return ('my_table = DissectorTable.get("%s")\n'
+    return ('end\n\n'
+            'my_table = DissectorTable.get("%s")\n'
             'my_table:add(%s, p4_proto)\n'
             % (table, value))
 
@@ -121,13 +122,14 @@ previous_decision_field = \
 previous_decision_value = \
     parse_state.prev.map.keys()[0].return_statement[2][0][0][0][1]
 
+
 output_string = build_preamble_string(protocol_name)
 
 field_offset = 0  # This is in bits
 for field in header_fields:
     output_string += build_field_string(field, field_offset)
     field_offset += field.width
-output_string += 'end\n\n'
+
 
 # Register insertion point
 dissector_table = previous_decision_field.lower()
