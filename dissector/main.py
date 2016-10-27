@@ -33,12 +33,17 @@ arg_parser.add_argument('-p', metavar="protocol", dest="protocol",
                              'given, build a dissector for every protocol.')
 
 args = arg_parser.parse_args()
-p4_source = args.p4_source
+p4_source = args.p4_source.name
+args.p4_source.close()
 p4_protocol = args.protocol
-absolute_source = os.path.abspath(p4_source.name)
+absolute_source = os.path.abspath(p4_source)
+
 if args.d is None:
+    # Set default filename if the user did not provide one
     dissector_filename = '%s-%s.lua' % (p4_source, p4_protocol)
 else:
+    # Otherwise, check that the destination path exists, and if yes use it
+    # for the output
     destination_path = os.path.dirname(os.path.abspath(args.d))
     if os.path.exists(destination_path):
         dissector_filename = os.path.abspath(args.d)
