@@ -21,13 +21,31 @@ from p4_hlir.main import HLIR
 # Handle input arguments
 arg_parser = argparse.ArgumentParser(description='Create a Wireshark dissector '
                                                  'from a P4 file')
-arg_parser.add_argument('-i', metavar="P4 input", type=argparse.FileType('r'),
-                        dest="p4_source")
-arg_parser.add_argument('-p', metavar="protocol", dest="protocol")
+arg_parser.add_argument('p4_source', type=argparse.FileType('r'),
+                        help='P4 source file')
+arg_parser.add_argument('-d', metavar='destination',
+                        help='Destination file. If none given, the destination'
+                             ' has the form <pwd>/<p4_source>-<protocol>.lua')
+arg_parser.add_argument('-p', metavar="protocol", dest="protocol",
+                        help='Protocol in P4 source file for which to build a '
+                             'dissector. Use instance rather than header name '
+                             '(i.e. without a "_t" at the end). If none is '
+                             'given, build a dissector for every protocol.')
+
 args = arg_parser.parse_args()
 p4_source = args.p4_source
 p4_protocol = args.protocol
 absolute_source = os.path.abspath(p4_source.name)
+if args.d is None:
+    dissector_filename = '%s-%s.lua' % (p4_source, p4_protocol)
+else:
+    destination_path = os.path.dirname(os.path.abspath(args.d))
+    if os.path.exists(destination_path):
+        dissector_filename = os.path.abspath(args.d)
+    else:
+        print "Error: Destination path (%s) does not exist." % destination_path
+        exit()
+
 
 # Build HLIR from input
 input_hlir = HLIR(absolute_source)
@@ -55,7 +73,6 @@ previous_decision_field = \
 previous_decision_value = \
     parse_state.prev.map.keys()[0].return_statement[2][0][0][0][1]
 # Write to file
-dissector_filename = os.path.dirname(absolute_source) + "/" + "p4_dissector.lua"
 shutil.copyfile('p4_dissector_template.lua', dissector_filename)
 f = open(dissector_filename, "a")
 
