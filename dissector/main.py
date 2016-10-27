@@ -13,10 +13,53 @@
 # limitations under the License.
 
 import os
+import sys
 import shutil
 import math
 import argparse
 from p4_hlir.main import HLIR
+
+
+def build_preamble_string(protocol_name):
+    return ('\n\n-- Auto generated section\n\n'
+            'p4_proto = Proto("%s","%s Protocol")\n'
+            'function p4_proto.dissector(buffer,pinfo,tree)\n'
+            '    pinfo.cols.protocol = "%s"\n'
+            '    local subtree = tree:add(p4_proto,buffer(),"%s Protocol Data")'
+            '\n'
+            % (protocol_name, protocol_name.upper(), protocol_name.upper(),
+               protocol_name.upper()))
+
+
+def build_field_string(field, offset):
+    byte_offset = offset / 8
+    byte_width = int(math.ceil(field.width / 8.0))
+    buffer_string = 'buffer(%i,%i)' % (byte_offset, byte_width)
+    field_string = '%s (%i bits)' % (field.name, field.width)
+    if field.width < 8:
+        start_bit = (offset + 1) % 8
+        end_bit = (offset + field.width) % 8
+        if not end_bit:
+            end_bit = 8
+        format_type = 'Binary'
+        format_string = 'tobits(%s:uint(), 8, %i, %i)' \
+                        % (buffer_string, start_bit, end_bit)
+    else:
+        start_bit = offset % 8
+        end_bit = field.width
+        hex_count = int(math.ceil(field.width / 4.0))
+        format_type = 'Hex'
+        format_string = 'string.format("%%0%iX", %s:bitfield(%i, %i))' \
+                        % (hex_count, buffer_string, start_bit, end_bit)
+
+    return '    subtree:add(%s, "%s - %s: " .. %s)\n' \
+                    % (buffer_string, field_string, format_type, format_string)
+
+
+def build_postamble_string(table, value):
+    return ('my_table = DissectorTable.get("%s")\n'
+            'my_table:add(%s, p4_proto)\n'
+            % (table, value))
 
 # Handle input arguments
 arg_parser = argparse.ArgumentParser(description='Create a Wireshark dissector '
@@ -40,7 +83,7 @@ absolute_source = os.path.abspath(p4_source)
 
 if args.d is None:
     # Set default filename if the user did not provide one
-    dissector_filename = '%s-%s.lua' % (p4_source, p4_protocol)
+    dissector_filename = '%s-%s.lua' % (os.path.basename(p4_source), p4_protocol)
 else:
     # Otherwise, check that the destination path exists, and if yes use it
     # for the output
@@ -49,7 +92,7 @@ else:
         dissector_filename = os.path.abspath(args.d)
     else:
         print "Error: Destination path (%s) does not exist." % destination_path
-        exit()
+        sys.exit()
 
 
 # Build HLIR from input
@@ -77,50 +120,14 @@ previous_decision_field = \
     parse_state.prev.map.keys()[0].return_statement[1][0].split('.')[1]
 previous_decision_value = \
     parse_state.prev.map.keys()[0].return_statement[2][0][0][0][1]
-# Write to file
-template_path = os.path.dirname(os.path.realpath(__file__))
-template_path += '/p4_dissector_template.lua'
-shutil.copyfile(template_path, dissector_filename)
-f = open(dissector_filename, "a")
 
-# Write the output Lua script
-f.write("\n\n-- Auto generated section\n\n")
-f.write('p4_proto = Proto(\"' + protocol_name + '","' + protocol_name.upper()
-        + ' Protocol")\n')
-f.write('function p4_proto.dissector(buffer,pinfo,tree)\n')
-f.write('    pinfo.cols.protocol = "' + protocol_name.upper() + '"\n')
-f.write('    local subtree = tree:add(p4_proto,buffer(),"'
-        + protocol_name.upper() + ' Protocol Data")\n')
+output_string = build_preamble_string(protocol_name)
 
 field_offset = 0  # This is in bits
-
-for i, field in enumerate(header_fields):
-    byte_offset_str = str(field_offset / 8)
-    field_length_str = str(int(math.ceil(field.width / 8.0)))
-    buffer_str = 'buffer(' + byte_offset_str + ',' + field_length_str + ')'
-    f.write('    subtree:add(' + buffer_str + ',')
-    f.write('"' + field.name + ' (' + str(field.width) + ' bits) - "')
-    if field.width < 8:
-        start_bit = str((field_offset + 1) % 8)
-        end_bit = str((field_offset + field.width) % 8)
-        if end_bit == '0':
-            end_bit = '8'
-        f.write(' .. "Binary: " .. ')
-        f.write('tobits(' + buffer_str + ':uint(), 8, ' + start_bit
-                + ', ' + end_bit + ')')
-    else:
-        f.write(' .. "Hex: " .. ')
-        start_bit = str(field_offset % 8)
-        end_bit = str(field.width)
-        bytecount = str(int(math.ceil(field.width / 4)))
-
-        f.write('string.format("%0' + bytecount + 'X"' + ',' + buffer_str
-                + ':bitfield(' + start_bit + ', ' + end_bit + '))')
-
-    f.write(')\n')
+for field in header_fields:
+    output_string += build_field_string(field, field_offset)
     field_offset += field.width
-
-f.write('end\n\n')
+output_string += 'end\n\n'
 
 # Register insertion point
 dissector_table = previous_decision_field.lower()
@@ -132,6 +139,12 @@ if previous_protocol_name == 'ipv4' or 'ipv6' and dissector_table == 'protocol':
 if previous_protocol_name == 'tcp' and dissector_table == 'port':
     dissector_table = 'tcp.port'
 
-f.write('my_table = DissectorTable.get("' + dissector_table + '")\n')
-f.write('my_table:add(' + insertion_value + ', p4_proto)\n')
+output_string += build_postamble_string(dissector_table, insertion_value)
+
+# Write to file
+template_path = os.path.dirname(os.path.realpath(__file__))
+template_path += '/p4_dissector_template.lua'
+shutil.copyfile(template_path, dissector_filename)
+f = open(dissector_filename, "a")
+f.write(output_string)
 f.close()
