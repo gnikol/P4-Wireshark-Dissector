@@ -78,7 +78,9 @@ previous_decision_field = \
 previous_decision_value = \
     parse_state.prev.map.keys()[0].return_statement[2][0][0][0][1]
 # Write to file
-shutil.copyfile('p4_dissector_template.lua', dissector_filename)
+template_path = os.path.dirname(os.path.realpath(__file__))
+template_path += '/p4_dissector_template.lua'
+shutil.copyfile(template_path, dissector_filename)
 f = open(dissector_filename, "a")
 
 # Write the output Lua script
