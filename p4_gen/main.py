@@ -13,11 +13,8 @@
 # limitations under the License.
 
 import os
-import sys
 import math
-import argparse
 import collections
-from p4_hlir.main import HLIR
 
 
 class ProtocolDissector:
@@ -142,70 +139,3 @@ def generate_dependencies(input_hlir):
             except (AttributeError, IndexError):
                 pass
     return dependency_dict
-
-
-
-# Handle input arguments
-arg_parser = argparse.ArgumentParser(description='Create a Wireshark dissector '
-                                                 'from a P4 file')
-arg_parser.add_argument('p4_source', type=argparse.FileType('r'),
-                        help='P4 source file')
-arg_parser.add_argument('-d', metavar='destination',
-                        help='Destination file. If none given, the destination'
-                             ' has the form <pwd>/<p4_source>-<protocol>.lua')
-arg_parser.add_argument('-p', metavar="protocol", dest="protocol",
-                        default='all',
-                        help='Protocol in P4 source file for which to build a '
-                             'dissector. Use instance rather than header name '
-                             '(i.e. without a "_t" at the end). If none is '
-                             'given, build a dissector for every protocol.')
-
-args = arg_parser.parse_args()
-p4_source = args.p4_source.name
-args.p4_source.close()
-protocol_name = args.protocol
-absolute_source = os.path.abspath(p4_source)
-destination = args.d
-
-
-if destination is None:
-    destination_path = os.getcwd()
-else:
-    # Otherwise, check that the destination path exists, and if yes use it
-    # for the output
-    destination_path = os.path.dirname(os.path.abspath(destination))
-    if not os.path.exists(destination_path):
-        print "Error: Destination path (%s) does not exist." % destination_path
-        sys.exit()
-
-# Build HLIR from input
-input_hlir = HLIR(absolute_source)
-input_hlir.build()
-
-# Generate dependencies
-dependency_dict = generate_dependencies(input_hlir)
-
-# Check which protocols require dissectors
-if protocol_name in dependency_dict:
-    dependency_dict = {protocol_name: dependency_dict[protocol_name]}
-elif protocol_name == 'all':
-    pass
-else:
-    print 'Protocol %s does not exist in %s' % (protocol_name, p4_source)
-    sys.exit()
-
-for protocol_name in dependency_dict:
-    dissector = ProtocolDissector(dependency_dict[protocol_name][0])
-    dissector.generate_output()
-    if destination is not None or protocol_name == 'all':
-        # If the user has not provided a destination or even if she did but
-        # wants all the dissectors, we need to construct the dissector
-        # filename
-        filename = '%s-%s.lua' % (
-            os.path.basename(p4_source).split('.p4')[0],
-            dissector.protocol.protocol_name)
-        dissector.filename = os.path.join(destination_path, filename)
-    else:
-        dissector.filename = destination
-
-    dissector.write()
