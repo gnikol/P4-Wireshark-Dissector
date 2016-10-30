@@ -14,54 +14,113 @@
 
 import os
 import sys
-import shutil
 import math
 import argparse
 import collections
 from p4_hlir.main import HLIR
 
 
-def generate_preamble_string(protocol_name):
-    return ('\n\n-- Auto generated section\n\n'
-            'p4_proto = Proto("%s","%s Protocol")\n'
-            'function p4_proto.dissector(buffer,pinfo,tree)\n'
-            '    pinfo.cols.protocol = "%s"\n'
-            '    local subtree = tree:add(p4_proto,buffer(),"%s Protocol Data")'
-            '\n'
-            % (protocol_name, protocol_name.upper(), protocol_name.upper(),
-               protocol_name.upper()))
+class ProtocolDissector:
+
+    def __init__(self, protocol):
+        self.protocol = protocol
+        self.filename = None
+        self.output = None
+
+    @staticmethod
+    def __generate_field_string(field, offset):
+        byte_offset = offset / 8
+        byte_width = int(math.ceil(field.width / 8.0))
+        buffer_string = 'buffer(%i,%i)' % (byte_offset, byte_width)
+        field_string = '%s (%i bits)' % (field.name, field.width)
+        if field.width < 8:
+            start_bit = (offset + 1) % 8
+            end_bit = (offset + field.width) % 8
+            if not end_bit:
+                end_bit = 8
+            format_type = 'Binary'
+            format_string = 'tobits(%s:uint(), 8, %i, %i)' \
+                            % (buffer_string, start_bit, end_bit)
+        else:
+            start_bit = offset % 8
+            end_bit = field.width
+            hex_count = int(math.ceil(field.width / 4.0))
+            format_type = 'Hex'
+            format_string = 'string.format("%%0%iX", %s:bitfield(%i, %i))' \
+                            % (hex_count, buffer_string, start_bit, end_bit)
+
+        return ('    subtree:add(%s, "%s - %s: " .. %s)\n'
+                % (buffer_string, field_string, format_type, format_string))
+
+    def __generate_preamble_string(self):
+
+        template_path = os.path.join(
+            os.path.dirname(os.path.realpath(__file__)),
+            'p4_dissector_template.lua')
+        with open(template_path) as template:
+            template_string = template.read()
+
+        return ('%s'
+                '\n\n-- Auto generated section\n\n'
+                'p4_proto = Proto("%s","%s Protocol")\n'
+                'function p4_proto.dissector(buffer,pinfo,tree)\n'
+                '    pinfo.cols.protocol = "%s"\n'
+                '    local subtree = tree:add(p4_proto,buffer(),'
+                '"%s Protocol Data")\n'
+                % (template_string,
+                    self.protocol.protocol_lua_string,
+                    self.protocol.protocol_lua_string.upper(),
+                    self.protocol.protocol_lua_string.upper(),
+                    self.protocol.protocol_lua_string.upper()))
+
+    def __generate_postamble_string(self):
+        # Register insertion point
+        self.protocol.branch_field.lower()
+        self.protocol.branch_value = str(self.protocol.branch_value).lower()
+
+        # Deal with some common cases
+        if (self.protocol.previous_protocol == 'ipv4' or 'ipv6' and
+                self.protocol.branch_field == 'protocol'):
+            self.protocol.branch_field = 'ip.proto'
+        if (self.protocol.previous_protocol == 'tcp'
+            and self.protocol.branch_field == 'port'):
+            self.protocol.branch_field = 'tcp.port'
+
+        return ('end\n\n'
+                'my_table = DissectorTable.get("%s")\n'
+                'my_table:add(%s, p4_proto)\n'
+                % (self.protocol.branch_field.lower(),
+                   self.protocol.branch_value))
+
+    def generate_output(self):
+
+        preamble_string = self.__generate_preamble_string()
+
+        field_offset = 0  # This is in bits
+        field_string = ''
+        for field in self.protocol.protocol_fields:
+            field_string += self.__generate_field_string(field, field_offset)
+            field_offset += field.width
+
+        postamble_string = self.__generate_postamble_string()
+
+        self.output = preamble_string + field_string + postamble_string
+
+    def write(self):
+        with open(self.filename, "w") as f:
+            f.write(self.output)
 
 
-def generate_field_string(field, offset):
-    byte_offset = offset / 8
-    byte_width = int(math.ceil(field.width / 8.0))
-    buffer_string = 'buffer(%i,%i)' % (byte_offset, byte_width)
-    field_string = '%s (%i bits)' % (field.name, field.width)
-    if field.width < 8:
-        start_bit = (offset + 1) % 8
-        end_bit = (offset + field.width) % 8
-        if not end_bit:
-            end_bit = 8
-        format_type = 'Binary'
-        format_string = 'tobits(%s:uint(), 8, %i, %i)' \
-                        % (buffer_string, start_bit, end_bit)
-    else:
-        start_bit = offset % 8
-        end_bit = field.width
-        hex_count = int(math.ceil(field.width / 4.0))
-        format_type = 'Hex'
-        format_string = 'string.format("%%0%iX", %s:bitfield(%i, %i))' \
-                        % (hex_count, buffer_string, start_bit, end_bit)
+class Protocol:
+    def __init__(self, protocol_name, protocol_fields, previous_protocol,
+                 branch_field, branch_value):
 
-    return ('    subtree:add(%s, "%s - %s: " .. %s)\n'
-            % (buffer_string, field_string, format_type, format_string))
-
-
-def generate_postamble_string(table, value):
-    return ('end\n\n'
-            'my_table = DissectorTable.get("%s")\n'
-            'my_table:add(%s, p4_proto)\n'
-            % (table, value))
+        self.protocol_name = protocol_name
+        self.protocol_lua_string = 'p4_' + protocol_name
+        self.protocol_fields = protocol_fields
+        self.previous_protocol = previous_protocol
+        self.branch_field = branch_field
+        self.branch_value = branch_value
 
 
 def generate_dependencies(input_hlir):
@@ -73,14 +132,17 @@ def generate_dependencies(input_hlir):
             try:
                 branch_field = parse_state.return_statement[1][0].split('.')[1]
                 next_protocol_fields = next_parse_state.latest_extraction.fields
-                protocol_dependencies = (current_protocol,
-                                         branch_field,
-                                         branch_value,
-                                         next_protocol_fields)
-                dependency_dict[next_protocol].append(protocol_dependencies)
+                protocol = Protocol(next_protocol,
+                                    next_protocol_fields,
+                                    current_protocol,
+                                    branch_field,
+                                    branch_value)
+
+                dependency_dict[next_protocol].append(protocol)
             except (AttributeError, IndexError):
                 pass
     return dependency_dict
+
 
 
 # Handle input arguments
@@ -101,20 +163,18 @@ arg_parser.add_argument('-p', metavar="protocol", dest="protocol",
 args = arg_parser.parse_args()
 p4_source = args.p4_source.name
 args.p4_source.close()
-p4_protocol = args.protocol
+protocol_name = args.protocol
 absolute_source = os.path.abspath(p4_source)
+destination = args.d
 
-if args.d is None:
-    # Set default filename if the user did not provide one
-    dissector_filename = '%s-%s.lua' % (
-    os.path.basename(p4_source), p4_protocol)
+
+if destination is None:
+    destination_path = os.getcwd()
 else:
     # Otherwise, check that the destination path exists, and if yes use it
     # for the output
-    destination_path = os.path.dirname(os.path.abspath(args.d))
-    if os.path.exists(destination_path):
-        dissector_filename = os.path.abspath(args.d)
-    else:
+    destination_path = os.path.dirname(os.path.abspath(destination))
+    if not os.path.exists(destination_path):
         print "Error: Destination path (%s) does not exist." % destination_path
         sys.exit()
 
@@ -123,39 +183,29 @@ input_hlir = HLIR(absolute_source)
 input_hlir.build()
 
 # Generate dependencies
-# TODO: Build all dissectors if protocol is 'all'
 dependency_dict = generate_dependencies(input_hlir)
-if p4_protocol in dependency_dict:
-    protocol_name = 'p4_' + p4_protocol
-    previous_protocol, decision_field, decision_value, header_fields = \
-        dependency_dict[p4_protocol][0]
+
+# Check which protocols require dissectors
+if protocol_name in dependency_dict:
+    dependency_dict = {protocol_name: dependency_dict[protocol_name]}
+elif protocol_name == 'all':
+    pass
 else:
-    print 'Protocol %s does not exist in %s' % (p4_protocol, p4_source)
+    print 'Protocol %s does not exist in %s' % (protocol_name, p4_source)
     sys.exit()
 
-output_string = generate_preamble_string(protocol_name)
+for protocol_name in dependency_dict:
+    dissector = ProtocolDissector(dependency_dict[protocol_name][0])
+    dissector.generate_output()
+    if destination is not None or protocol_name == 'all':
+        # If the user has not provided a destination or even if she did but
+        # wants all the dissectors, we need to construct the dissector
+        # filename
+        filename = '%s-%s.lua' % (
+            os.path.basename(p4_source).split('.p4')[0],
+            dissector.protocol.protocol_name)
+        dissector.filename = os.path.join(destination_path, filename)
+    else:
+        dissector.filename = destination
 
-field_offset = 0  # This is in bits
-for field in header_fields:
-    output_string += generate_field_string(field, field_offset)
-    field_offset += field.width
-
-# Register insertion point
-dissector_table = decision_field.lower()
-insertion_value = str(decision_value).lower()
-
-# Deal with some common cases
-if previous_protocol == 'ipv4' or 'ipv6' and dissector_table == 'protocol':
-    dissector_table = 'ip.proto'
-if previous_protocol == 'tcp' and dissector_table == 'port':
-    dissector_table = 'tcp.port'
-
-output_string += generate_postamble_string(dissector_table, insertion_value)
-
-# Write to file
-template_path = os.path.dirname(os.path.realpath(__file__))
-template_path += '/p4_dissector_template.lua'
-shutil.copyfile(template_path, dissector_filename)
-f = open(dissector_filename, "a")
-f.write(output_string)
-f.close()
+    dissector.write()
