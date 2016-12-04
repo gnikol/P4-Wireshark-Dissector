@@ -80,7 +80,7 @@ class ProtocolDissector:
                 self.protocol.branch_field == 'protocol'):
             self.protocol.branch_field = 'ip.proto'
         if (self.protocol.previous_protocol == 'tcp'
-            and self.protocol.branch_field == 'port'):
+                and self.protocol.branch_field == 'port'):
             self.protocol.branch_field = 'tcp.port'
 
         return ('end\n\n'
@@ -124,11 +124,13 @@ def generate_dependencies(input_hlir):
     dependency_dict = collections.defaultdict(list)
     for parse_state in input_hlir.p4_parse_states.itervalues():
         current_protocol = parse_state.name.split('parse_')[-1]
-        for branch_value, next_parse_state in parse_state.branch_to.iteritems():
+        for branch_value, next_parse_state \
+                in parse_state.branch_to.iteritems():
             next_protocol = next_parse_state.name.split('parse_')[-1]
             try:
                 branch_field = parse_state.return_statement[1][0].split('.')[1]
-                next_protocol_fields = next_parse_state.latest_extraction.fields
+                next_protocol_fields = \
+                    next_parse_state.latest_extraction.fields
                 protocol = Protocol(next_protocol,
                                     next_protocol_fields,
                                     current_protocol,

@@ -20,12 +20,11 @@ import argparse
 from p4_hlir.main import HLIR
 if "p4_gen" not in sys.modules:
     sys.path.append("../")
-import p4_gen
-
+from p4_gen.main import ProtocolDissector, generate_dependencies  # noqa
 
 # Handle input arguments
-arg_parser = argparse.ArgumentParser(description='Create a Wireshark dissector '
-                                                 'from a P4 file')
+arg_parser = argparse.ArgumentParser(description='Create a Wireshark dissector'
+                                                 ' from a P4 file')
 arg_parser.add_argument('p4_source', type=argparse.FileType('r'),
                         help='P4 source file')
 arg_parser.add_argument('-d', metavar='destination',
@@ -67,7 +66,7 @@ except Exception as e:
 
 
 # Generate dependencies
-dependency_dict = p4_gen.generate_dependencies(input_hlir)
+dependency_dict = generate_dependencies(input_hlir)
 
 # Check which protocols require dissectors
 if protocol_name in dependency_dict:
@@ -79,7 +78,7 @@ else:
     sys.exit()
 
 for protocol_name in dependency_dict:
-    dissector = p4_gen.ProtocolDissector(dependency_dict[protocol_name][0])
+    dissector = ProtocolDissector(dependency_dict[protocol_name][0])
     dissector.generate_output()
     if destination is None or len(dependency_dict) > 1:
         # If the user has not provided a destination or even if she did but
