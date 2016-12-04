@@ -18,7 +18,10 @@ import os
 import sys
 import argparse
 from p4_hlir.main import HLIR
+if "p4_gen" not in sys.modules:
+    sys.path.append("../")
 import p4_gen
+
 
 # Handle input arguments
 arg_parser = argparse.ArgumentParser(description='Create a Wireshark dissector '
