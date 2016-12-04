@@ -58,7 +58,13 @@ else:
 
 # Build HLIR from input
 input_hlir = HLIR(absolute_source)
-input_hlir.build()
+try:
+    input_hlir.build()
+except Exception as e:
+    print "Error while parsing input file."
+    print e
+    sys.exit()
+
 
 # Generate dependencies
 dependency_dict = p4_gen.generate_dependencies(input_hlir)
