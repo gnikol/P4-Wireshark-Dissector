@@ -75,12 +75,18 @@ else:
 for protocol_name in dependency_dict:
     dissector = p4_gen.ProtocolDissector(dependency_dict[protocol_name][0])
     dissector.generate_output()
-    if destination is not None or protocol_name == 'all':
+    if destination is None or len(dependency_dict) > 1:
         # If the user has not provided a destination or even if she did but
         # wants all the dissectors, we need to construct the dissector
         # filename
+        if destination is None:
+            filename_prefix = os.path.basename(p4_source).split('.p4')[0]
+        else:
+            filename_prefix = destination.split('.lua')[0]
+            print 'Warning: multiple headers found. Adding ' \
+                + protocol_name + ' to destination filename.'
         filename = '%s-%s.lua' % (
-            os.path.basename(p4_source).split('.p4')[0],
+            filename_prefix,
             dissector.protocol.protocol_name)
         dissector.filename = os.path.join(destination_path, filename)
     else:
