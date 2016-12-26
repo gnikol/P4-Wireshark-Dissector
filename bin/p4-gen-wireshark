@@ -19,7 +19,8 @@ import sys
 import argparse
 from p4_hlir.main import HLIR
 if "p4_gen" not in sys.modules:
-    sys.path.append("../")
+    script_path = os.path.realpath(__file__)
+    sys.path.append(os.path.abspath(script_path + "/../../"))
 from p4_gen.main import ProtocolDissector, generate_dependencies  # noqa
 
 # Handle input arguments
