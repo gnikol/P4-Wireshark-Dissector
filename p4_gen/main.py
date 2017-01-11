@@ -76,11 +76,11 @@ class ProtocolDissector:
         self.protocol.branch_value = str(self.protocol.branch_value).lower()
 
         # Deal with some common cases
-        if (self.protocol.previous_protocol == 'ipv4' or 'ipv6' and
-                self.protocol.branch_field == 'protocol'):
+        if self.protocol.previous_protocol == 'ipv4' or 'ipv6'\
+           and self.protocol.branch_field == 'protocol':
             self.protocol.branch_field = 'ip.proto'
-        if (self.protocol.previous_protocol == 'tcp'
-                and self.protocol.branch_field == 'port'):
+        if self.protocol.previous_protocol == 'tcp'\
+           and self.protocol.branch_field == 'port':
             self.protocol.branch_field = 'tcp.port'
 
         return ('end\n\n'
